@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>民义党公共安全局员工调查问卷</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f4f5f7;--card:#fff;--tx:#1d2330;--mu:#667085;--bd:#d9dde5;--pr:#1f4e8c;--prt:#fff;--dn:#b42318}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#12161e;--card:#1b212c;--tx:#e8ebf0;--mu:#98a1b3;--bd:#2d3646;--pr:#5b95e0;--prt:#0c1118;--dn:#f97066}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#12161e;--card:#1b212c;--tx:#e8ebf0;--mu:#98a1b3;--bd:#2d3646;--pr:#5b95e0;--prt:#0c1118;--dn:#f97066}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.w{max-width:860px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0}h2{font-size:17px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:14px}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--bd);border-radius:7px;background:var(--bg);color:var(--tx);font:inherit;margin:4px 0 10px}
+input[type=checkbox],input[type=radio]{width:auto;margin:0 6px 0 0}
+label{display:block;color:var(--mu);font-size:13px}
+.o{display:flex;align-items:center;color:var(--tx);font-size:15px;padding:3px 0}
+button{background:var(--pr);color:var(--prt);border:0;border-radius:7px;padding:8px 14px;font:inherit;cursor:pointer;margin:2px 4px 2px 0}
+button.g{background:transparent;color:var(--pr);border:1px solid var(--bd)}
+button.d{background:transparent;color:var(--dn);border:1px solid var(--bd)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.tabs button{background:var(--card);color:var(--tx);border:1px solid var(--bd)}
+.tabs button.on{background:var(--pr);color:var(--prt)}
+.mu{color:var(--mu);font-size:13px}.err{color:var(--dn);font-size:13px;min-height:18px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--bd)}
+.row:first-of-type{border-top:0}
+.bar{height:8px;background:var(--bd);border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--pr)}
+.tbl{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="w" id="app"></div>
+<script>
+const PRESET={"行政事务部":{create:1,view:1,manage:1},"首相":{create:1,view:1,manage:0},"人事部":{create:1,view:1,manage:0},"文书员":{create:1,view:0,manage:0},"调查人员":{create:0,view:0,manage:0}};
+const ROLES=Object.keys(PRESET);
+const PN={create:"创建问卷",view:"查看结果",manage:"管理账号"};
+const TITLE="民义党公共安全局员工调查问卷";
+let me=null,tab="list",fill=null,editU=null,msg="",mode="equal",wt={},qs=[{t:"",type:"single",o:""}];
+function ld(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+let users=[],surveys=[],resp=[];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $=id=>document.getElementById(id);
+const can=p=>me&&me.perms[p];
+
+function render(){
+  const a=$("app");
+  if(!me){
+    a.innerHTML=`<div class="card" style="max-width:380px;margin:8vh auto 0"><h1>${TITLE}</h1><p class="mu">请登入账号</p>
+    <label>账号 ID</label><input id="lid" autocomplete="username"><label>密码</label><input id="lpw" type="password" autocomplete="current-password">
+    <div class="err" id="le"></div><button onclick="login()">登入</button></div>`;
+    $("lpw").onkeydown=e=>{if(e.key==="Enter")login()};return;
+  }
+  let t=[["list","问卷列表"],["mine","我的投票纪录"]];
+  if(can("create"))t.push(["new","创建问卷"]);
+  if(can("view"))t.push(["res","问卷结果"]);
+  if(can("manage"))t.push(["acc","账号管理"]);
+  let h=`<div class="top"><h1>${TITLE}</h1><div class="mu">${esc(me.name)}（${esc(me.role)}・${esc(me.id)}） <button class="g" onclick="logout()">登出</button></div></div>
+  <div class="tabs">${t.map(x=>`<button class="${tab===x[0]&&!fill?"on":""}" onclick="tab='${x[0]}';fill=null;msg='';render()">${x[1]}</button>`).join("")}</div>`;
+  if(msg)h+=`<div class="card mu">${esc(msg)}</div>`;
+  if(fill)h+=vFill();else if(tab==="list")h+=vList();else if(tab==="new")h+=vNew();else if(tab==="res")h+=vRes();else if(tab==="mine")h+=vMine();else h+=vAcc();
+  a.innerHTML=h;
+}
+async function api(m,u,b){const r=await fetch(u,{method:m,headers:{"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined});
+  if(!r.ok){let t="操作失败";try{t=(await r.json()).error||t}catch(_){}const e=new Error(t);e.st=r.status;throw e}
+  return r.status===200?r.json():null}
+async function load(){const d=await api("GET","/api/data");me=d.me;users=d.users;surveys=d.surveys;resp=d.resp}
+async function login(){try{await api("POST","/api/login",{id:$("lid").value.trim(),pwd:$("lpw").value});await load();tab="list";msg="";render()}catch(e){$("le").textContent=e.message}}
+async function act(f,m){try{await f();await load();msg=m||""}catch(e){msg=e.message;if(e.st===401)me=null}render()}
+async function logout(){await api("POST","/api/logout").catch(()=>{});me=null;fill=null;render()}
+function vList(){
+  if(!surveys.length)return`<div class="card mu">目前还没有问卷。</div>`;
+  return`<div class="card">`+surveys.map(s=>{
+    const done=resp.some(r=>r.sid===s.id&&r.uid===me.id);
+    return`<div class="row"><div><b>${esc(s.title)}</b><div class="mu">${s.qs.length} 题・创建者 ${esc(s.by)}・${s.mode==="weighted"?"等级投票制":"平等投票制"}</div></div><div>
+    ${done?`<span class="mu">已填写</span>`:`<button onclick="fill='${s.id}';render()">填写</button>`}
+    ${(can("manage")||s.by===me.id)?`<button class="d" onclick="delS('${s.id}')">删除</button>`:""}</div></div>`}).join("")+`</div>`;
+}
+function vFill(){
+  const s=surveys.find(x=>x.id===fill);
+  return`<div class="card"><h2>${esc(s.title)}</h2><div class="mu">${s.mode==="weighted"?"等级投票制：你的职位 "+esc(me.role)+"，票数分值 "+vw(s):"平等投票制：一人一票"}</div>`+s.qs.map((q,i)=>`<div style="margin:14px 0"><b>${i+1}. ${esc(q.t)}</b><div id="q${i}">`+
+    (q.type==="text"?`<textarea rows="3"></textarea>`:q.o.map((o,j)=>`<label class="o"><input type="${q.type==="single"?"radio":"checkbox"}" name="q${i}" value="${esc(o)}">${esc(o)}</label>`).join(""))+`</div></div>`).join("")+
+    `<button onclick="submitF()">提交</button><button class="g" onclick="fill=null;render()">取消</button></div>`;
+}
+function submitF(){const s=surveys.find(x=>x.id===fill);
+  const ans=s.qs.map((q,i)=>{const c=$("q"+i);return q.type==="text"?c.querySelector("textarea").value.trim():[...c.querySelectorAll("input:checked")].map(x=>x.value)});
+  act(async()=>{await api("POST","/api/respond",{sid:s.id,ans});fill=null},"提交成功，谢谢填写。")}
+function delS(id){act(()=>api("DELETE","/api/surveys/"+id),"问卷已删除。")}
+function vNew(){
+  return`<div class="card"><h2>创建问卷</h2><label>问卷标题</label><input id="nt" value="${esc(window._nt||"")}">
+  ${can("manage")?`<label>投票制度</label><select onchange="sync();mode=this.value;render()"><option value="equal" ${mode==="equal"?"selected":""}>平等投票制（一人一票）</option><option value="weighted" ${mode==="weighted"?"selected":""}>等级投票制（各职位不同分值）</option></select>
+  ${mode==="weighted"?ROLES.map(r=>`<label>${r} 的分值</label><input type="number" min="0" step="any" value="${wt[r]!==undefined?wt[r]:1}" oninput="wt['${r}']=this.value">`).join(""):""}`:`<div class="mu" style="margin:6px 0 10px">投票制度：平等投票制（一人一票）。等级投票制只能由行政事务部设置。</div>`}`+
+  qs.map((q,i)=>`<div class="card" style="background:var(--bg)"><label>题目 ${i+1}</label><input placeholder="例如：你有什么建议？" value="${esc(q.t)}" oninput="qs[${i}].t=this.value">
+  <label>题型</label><select onchange="qs[${i}].type=this.value;sync();render()"><option value="single" ${q.type==="single"?"selected":""}>单选</option><option value="multi" ${q.type==="multi"?"selected":""}>多选</option><option value="text" ${q.type==="text"?"selected":""}>文字回答（自由填写，不计票）</option></select>
+  ${q.type!=="text"?`<label>选项（每行一个）</label><textarea rows="3" oninput="qs[${i}].o=this.value">${esc(q.o)}</textarea>`:""}
+  ${qs.length>1?`<button class="d" onclick="sync();qs.splice(${i},1);render()">删除此题</button>`:""}</div>`).join("")+
+  `<button class="g" onclick="sync();qs.push({t:'',type:'single',o:''});render()">＋ 添加题目</button><button onclick="saveS()">发布问卷</button><div class="err" id="ne"></div></div>`;
+}
+function sync(){const e=$("nt");if(e)window._nt=e.value}
+function saveS(){
+  const title=$("nt").value.trim();
+  const list=qs.filter(q=>q.t.trim()).map(q=>({t:q.t.trim(),type:q.type,o:q.type==="text"?[]:q.o.split("\n").map(x=>x.trim()).filter(Boolean)}));
+  if(!title||!list.length||list.some(q=>q.type!=="text"&&q.o.length<2)){$("ne").textContent="请填写标题、题目，选择题至少需要 2 个选项";return}
+  act(async()=>{await api("POST","/api/surveys",{title,qs:list,mode,w:wt});qs=[{t:"",type:"single",o:""}];mode="equal";wt={};window._nt="";tab="list"},"问卷已发布。");
+}
+function vRes(){
+  if(!surveys.length)return`<div class="card mu">目前还没有问卷。</div>`;
+  return surveys.map(s=>{
+    const rs=resp.filter(r=>r.sid===s.id),W=r=>r.w===undefined?1:r.w,tot=rs.reduce((a,r)=>a+W(r),0),wd=s.mode==="weighted";
+    return`<div class="card"><h2>${esc(s.title)}</h2><div class="mu">共 ${rs.length} 份回复・${wd?"等级投票制，各职位分值："+Object.keys(s.w).map(k=>k+" "+s.w[k]).join("、"):"平等投票制（一人一票）"}</div>`+s.qs.map((q,i)=>{
+      let b=`<div style="margin-top:12px"><b>${i+1}. ${esc(q.t)}</b>`;
+      if(q.type==="text")b+=rs.map(r=>r.ans[i]?`<div class="mu">${esc(r.name)}：${esc(r.ans[i])}</div>`:"").join("");
+      else b+=q.o.map(o=>{const n=rs.filter(r=>r.ans[i].includes(o)).reduce((a,r)=>a+W(r),0),p=tot?Math.round(n/tot*100):0;
+        return`<div style="margin-top:6px"><div>${esc(o)} <span class="mu">${n} ${wd?"分":"票"}（${p}%）</span></div><div class="bar"><i style="width:${p}%"></i></div></div>`}).join("");
+      return b+`</div>`}).join("")+`</div>`}).join("");
+}
+const vw=s=>(s.w&&s.w[me.role]!==undefined)?s.w[me.role]:1;
+function vMine(){
+  const mine=resp.filter(r=>r.uid===me.id).reverse();
+  if(!mine.length)return`<div class="card mu">你还没有投票或填写任何问卷。</div>`;
+  return mine.map(r=>{const s=surveys.find(x=>x.id===r.sid);if(!s)return"";
+    return`<div class="card"><h2>${esc(s.title)}</h2><div class="mu">${esc(r.time||"")}・${s.mode==="weighted"?"等级投票制，你当时的分值 "+(r.w===undefined?1:r.w):"平等投票制"}</div>`+s.qs.map((q,i)=>{const a=r.ans[i];const t=Array.isArray(a)?(a.join("、")||"（未选）"):(a||"（未填）");return`<div style="margin-top:8px"><b>${i+1}. ${esc(q.t)}</b><div>${esc(t)}</div></div>`}).join("")+`</div>`}).join("");
+}
+function vAcc(){
+  const u=editU||{id:"",name:"",pwd:"",role:"调查人员",perms:{...PRESET["调查人员"]}};
+  return`<div class="card"><h2>${editU?"编辑账号":"创建账号"}</h2>
+  <label>账号 ID</label><input id="aid" value="${esc(u.id)}" ${editU?"readonly":""}>
+  <label>账号名称</label><input id="anm" value="${esc(u.name)}">
+  <label>密码${editU?"（留空则不修改）":""}</label><input id="apw" type="password" autocomplete="new-password">
+  <label>职位</label><select id="arl" onchange="presetP()">${Object.keys(PRESET).map(r=>`<option ${u.role===r?"selected":""}>${r}</option>`).join("")}</select>
+  <label>权限（选职位会自动套用，也可手动调整）</label>${Object.keys(PN).map(k=>`<label class="o"><input type="checkbox" id="p_${k}" ${u.perms[k]?"checked":""}>${PN[k]}</label>`).join("")}
+  <div class="err" id="ae"></div><button onclick="saveU()">保存</button>${editU?`<button class="g" onclick="editU=null;render()">取消编辑</button>`:""}</div>
+  <div class="card"><h2>所有账号</h2><div class="tbl">`+users.map(x=>`<div class="row"><div><b>${esc(x.name)}</b> <span class="mu">${esc(x.id)}・${esc(x.role)}・${Object.keys(PN).filter(k=>x.perms[k]).map(k=>PN[k]).join("、")||"仅填写问卷"}</span></div>
+  <div><button class="g" onclick="editU=users.find(z=>z.id==='${x.id}');render()">编辑</button>${x.id!=="A001"?`<button class="d" onclick="delU('${x.id}')">删除</button>`:""}</div></div>`).join("")+`</div></div>`;
+}
+function presetP(){const p=PRESET[$("arl").value];Object.keys(PN).forEach(k=>$("p_"+k).checked=!!p[k])}
+function saveU(){
+  const id=$("aid").value.trim(),name=$("anm").value.trim(),pwd=$("apw").value,role=$("arl").value;
+  if(!id||!name||(!pwd&&!editU)){$("ae").textContent="请填写 ID、名称和密码";return}
+  if(!editU&&users.some(x=>x.id===id)){$("ae").textContent="此 ID 已存在";return}
+  const perms={};Object.keys(PN).forEach(k=>perms[k]=$("p_"+k).checked?1:0);
+  act(async()=>{await api("POST","/api/users",{id,name,pwd,role,perms});editU=null},"账号已保存。");
+}
+function delU(id){act(()=>api("DELETE","/api/users/"+id),"账号已删除。")}
+load().then(render,render);
+</script>
+</body>
+</html>
